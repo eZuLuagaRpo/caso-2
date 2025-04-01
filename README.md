@@ -111,13 +111,9 @@ allure generate allure-report
 
 Los entregables para esta actividad son:
 
-1. Informe escrito en formato PDF o Word.
-2. Informe de Allure generado.
+1. Informe escrito en formato PDF (NO PONERLO DENTRO DE CARPETA COMPRIMIDA. ANEXARLO COMO ARCHIVO INDIVIDUAL).
+2. Informe de Allure generado (Anexar en el comprimido).
 3. Proyecto comprimido en formato ZIP que incluya todas las pruebas en la carpeta `tests/`.
-
-### Fecha Límite de Entrega
-
-La fecha límite para la entrega de todos los documentos es el miércoles 09 de octubre a media noche, en la carpeta `/Entregas/Caso1/apellido_nombre_psoft_caso2.zip`.
 
 ## Rúbricas de Evaluación
 

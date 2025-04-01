@@ -2,7 +2,15 @@ from modules import Authentication, Analytics, report, getData, spinner
 from getpass import getpass
 import threading
 
-AuthSystem = Authentication(dataBaseFail())
+class dataBase: # Fake
+    def __init__(self) -> None:
+        pass
+    def connection(self): # Stub
+        return "Success"
+    def db(self):# Stub
+        return {"user1":"pass1","user2":"pass2"}
+
+AuthSystem = Authentication(dataBase())
 
 # Crear un hilo paralelo para el spinner de carga
 stop_event = threading.Event()

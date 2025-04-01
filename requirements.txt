@@ -6,3 +6,4 @@ shapely
 matplotlib
 contextily
 reportlab
+openpyxl
