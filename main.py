@@ -38,7 +38,7 @@ if session:
     print(f"===========================================================")
     print("Obteniendo datos de ... https://data.urbansharing.com/bergenbysykkel.no/trips/v1/2024/09.json")
 
-    data_response = getData("https://data.urbansharing.com/bergenbysykkel.no/trips/v1/2024/09.json","data/input")
+    data_response = getData("https://data.urbansharing.com/bergenbysykkel.no/trips/v1/2024/09.json","data/input") 
 
     AnalyticsModule = Analytics()
     analized_data = AnalyticsModule.AnalizeData()

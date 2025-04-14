@@ -16,7 +16,7 @@ class Authentication:
             print("Ya hay una sesión activa.")
             return True
         
-        db = self.dataBaseObject.db()
+        db = self.dataBaseObject.db() #
 
         if user in db and db[user] == password:
             self.session = True

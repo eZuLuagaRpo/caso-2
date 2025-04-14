@@ -7,7 +7,7 @@ def getData(url,path):
         data = response.json()
         try:
             df = pd.DataFrame(data)
-            df = df.iloc[0:10000]
+            df = df.iloc[0:10000] 
             print("Guardando datos en data/input/datos.xlsx ...")
             df.to_excel(f"{path}/data.xlsx",index=False)
             print("Datos obtenidos y guardados.")
