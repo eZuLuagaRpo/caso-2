@@ -35,8 +35,31 @@ class Analytics:
             avg_duration=('duration', 'mean'),
             trip_count=('route', 'count')
         ).reset_index()
+        
+        def CalculateStats(series):
+                return {
+                    "Promedio": series.mean(),
+                    "Varianza": series.var(),
+                    "Desviación Estándar": series.std(),
+                    "Máximo": series.max(),
+                    "Mínimo": series.min(),
+                    "Percentil 25%": series.quantile(0.25),
+                    "Mediana (50%)": series.quantile(0.50),
+                    "Percentil 75%": series.quantile(0.75)
+                } 
+        # Calcular estadísticas para la duración
+        duration_stats = CalculateStats(data["duration"])
+        duration_stats_df = pd.DataFrame(duration_stats, index=["Duración de Viajes"])
+        
+        # Calcular estadísticas para la distancia
+        distance_stats = CalculateStats(data["distance_km"])
+        distance_stats_df = pd.DataFrame(distance_stats, index=["Distancia (km)"])
 
+        stats_table = pd.concat([duration_stats_df, distance_stats_df])
+
+        
         longest_duration_routes = average_route_durations.sort_values(by='avg_duration', ascending=False).reset_index().drop(columns="index").head(10)
 
-        self.analizedData = {"data":data, "most_popular_routes": most_popular_routes, "distance_between_routes":distance_between_routes, "longest_duration_routes":longest_duration_routes}
+        self.analizedData = {"data":data, "most_popular_routes": most_popular_routes, "distance_between_routes":distance_between_routes, "longest_duration_routes":longest_duration_routes, "stats_table": stats_table}
         return self.analizedData
+
