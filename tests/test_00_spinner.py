@@ -56,3 +56,33 @@ def test_spinner_join_without_start():
     
     # Verificar que no hay errores (el hilo simplemente no está activo)
     assert not spinner_thread.is_alive()
+
+
+
+import pytest
+import threading
+import time
+from modules import spinner
+
+import pytest
+import threading
+import time
+from modules import spinner
+
+def test_spinner_stops_on_error():
+    stop_event = threading.Event()
+    spinner_thread = threading.Thread(target=spinner, args=(stop_event,))
+    spinner_thread.start()
+    
+    try:
+        time.sleep(0.5)  # Dar tiempo al spinner para ejecutarse
+        raise RuntimeError("Simulated error")
+    except RuntimeError:
+        # No llamar a stop_event.set() para reflejar el fallo en main.py
+        time.sleep(0.5)  # Esperar para verificar el estado
+        spinner_thread.join(timeout=0.1)  # Intentar unir con timeout corto
+        assert not spinner_thread.is_alive(), "Spinner did not stop after error"
+    
+    # Limpieza
+    stop_event.set()
+    spinner_thread.join(timeout=1.0)

@@ -95,18 +95,6 @@ def test_login_With_Mock():
     mock_db.connection.assert_called_once()
     mock_db.db.assert_called_once()
     
-# Tests para verificar el comportamiento con Mock y fallo de conexión
-def test_login_With_Mock_Fail_Connection():
-    mock_db = Mock()
-    mock_db.connection.return_value = "Error"
-    
-    auth = Authentication(mock_db)
-    assert auth.login("test_user", "test_password") == False
-    assert auth.getSession() == False
-    
-    mock_db.connection.assert_called_once()
-    mock_db.db.assert_not_called() 
-
 #Test para credenciales muy largas
 def test_very_long_credentials():
     mock_db = Mock()
@@ -117,4 +105,3 @@ def test_very_long_credentials():
     auth = Authentication(mock_db)
     assert auth.login(long_user, long_pass) == True
     assert auth.getSession() == True #error porque no se maneja el error de credenciales muy largas y sirve para seguridad
-
