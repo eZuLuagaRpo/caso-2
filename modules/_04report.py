@@ -13,6 +13,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 from datetime import datetime
+import seaborn as sns
 
 class PDFWithHeaderFooter(SimpleDocTemplate):
     def __init__(self, *args, **kwargs):
@@ -175,6 +176,85 @@ def report(filePath, analized_data, username):
     buffer_longest_duration = create_bar_chart(longest_duration_routes, 'avg_duration', 'Longest Average Durations')
     elements.append(Image(buffer_longest_duration, width=400, height=300))
 
+    # Add Statistics Table
+    elements.append(Paragraph("Statistics for Duration and Distance", styles['Heading2']))
+    table_stats = dataframe_to_table(analized_data["stats"])
+    table_stats.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                                      ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                                      ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                                      ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                                      ('FONTSIZE', (0, 0), (-1, 0), 12),
+                                      ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                                      ('BACKGROUND', (0, 1), (-1, -1), colors.beige)]))
+    elements.append(table_stats)
+
+    # Create individual distribution plots for Duration and Distance
+    plt.figure(figsize=(12, 6))
+    plt.subplot(1, 2, 1)
+    plt.hist(data['duration'], bins=30, color='blue', alpha=0.7)
+    plt.title('Distribution of Duration')
+    plt.xlabel('Duration')
+    plt.ylabel('Frequency')
+
+    plt.subplot(1, 2, 2)
+    plt.hist(data['distance_km'], bins=30, color='green', alpha=0.7)
+    plt.title('Distribution of Distance')
+    plt.xlabel('Distance (km)')
+    plt.ylabel('Frequency')
+
+    # Save the distribution plot to a buffer
+    buffer_distribution = BytesIO()
+    plt.savefig(buffer_distribution, format='png')
+    buffer_distribution.seek(0)
+    plt.close()
+    elements.append(Image(buffer_distribution, width=800, height=400))
+
+    # Create a scatter plot to analyze the relationship between Duration and Distance
+    plt.figure(figsize=(8, 6))
+    plt.scatter(data['duration'], data['distance_km'], alpha=0.5)
+    plt.title('Duration vs Distance')
+    plt.xlabel('Duration')
+    plt.ylabel('Distance (km)')
+
+    # Save the scatter plot to a buffer
+    buffer_scatter = BytesIO()
+    plt.savefig(buffer_scatter, format='png')
+    buffer_scatter.seek(0)
+    plt.close()
+    elements.append(Image(buffer_scatter, width=600, height=400))
+
+    # Create box plots for Duration and Distance
+    plt.figure(figsize=(12, 6))
+    plt.subplot(1, 2, 1)
+    plt.boxplot(data['duration'], vert=False)
+    plt.title('Box Plot of Duration')
+    plt.xlabel('Duration')
+
+    plt.subplot(1, 2, 2)
+    plt.boxplot(data['distance_km'], vert=False)
+    plt.title('Box Plot of Distance (km)')
+    plt.xlabel('Distance (km)')
+
+    # Save the box plot to a buffer
+    buffer_box = BytesIO()
+    plt.savefig(buffer_box, format='png')
+    buffer_box.seek(0)
+    plt.close()
+    elements.append(Image(buffer_box, width=800, height=400))
+
+    # Create a correlation heatmap
+    correlation_matrix = data[['duration', 'distance_km']].corr()
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt='.2f', square=True)
+    plt.title('Correlation Heatmap')
+
+    # Save the heatmap to a buffer
+    buffer_heatmap = BytesIO()
+    plt.savefig(buffer_heatmap, format='png')
+    buffer_heatmap.seek(0)
+    plt.close()
+    elements.append(Image(buffer_heatmap, width=600, height=400))
+
     # Build PDF
     doc.build(elements)
 
@@ -183,6 +263,10 @@ def report(filePath, analized_data, username):
     buffer_distances.close()
     buffer_longest_duration.close()
     map_buffer.close()
+    buffer_distribution.close()
+    buffer_scatter.close()
+    buffer_box.close()
+    buffer_heatmap.close()
 
     # Save the PDF to a file
     with open(filePath, 'wb') as f:

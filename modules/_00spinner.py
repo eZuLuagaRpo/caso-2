@@ -8,3 +8,5 @@ def spinner(stop_event):
         sys.stdout.flush()
         sys.stdout.write('\b')  # Borra el símbolo anterior
         time.sleep(0.1)
+
+

@@ -31,7 +31,6 @@ def test_successful_response(temp_dir):
         assert len(df) == 10000
         assert list(df.columns) == ["id", "name", "value"]
 
-
 # Test para verificar que getData maneja correctamente una respuesta con error
 def test_error_response(temp_dir):
     mock_response = MagicMock()

@@ -10,7 +10,7 @@ class DummyDatabase:
     def db(self):
         return {}
 
-class StubDatabase:
+class StubDatabase: 
     """Retorna valores predefinidos"""
     def connection(self):
         return "Success"
@@ -36,11 +36,26 @@ def auth_stub():
     auth.logout()
 
 # Tests para login con tipos inválidos
-def test_login_with_invalid_types(auth_dummy):
+def test_login_invalid_types(auth_dummy):
     with pytest.raises(ValueError):
         auth_dummy.login(123, "password")
     with pytest.raises(ValueError):
         auth_dummy.login("user", 123)
+
+#Test para datos vacios
+def test_login_empty_strings(auth_dummy):
+    with pytest.raises(ValueError):
+        auth_dummy.login("", "")
+
+#Test para datos nulos
+def test_login_none_values(auth_dummy):
+    with pytest.raises(ValueError):
+        auth_dummy.login(None, None)
+
+#Test para base de datos vacia
+def test_empty_database(auth_dummy):
+    assert auth_dummy.login("test_user", "test_password") == False
+    assert auth_dummy.getSession() == False
 
 # Tests para login exitoso
 def test_valid_login(auth_stub):
@@ -58,6 +73,15 @@ def test_logout(auth_stub):
     assert auth_stub.getSession() == True
     auth_stub.logout()
     assert auth_stub.getSession() == False
+
+#Test para base de datos nula
+def test_none_database():
+    mock_db = Mock()
+    mock_db.connection.return_value = "Success"
+    mock_db.db.return_value = None
+    auth = Authentication(mock_db)
+    assert auth.login("test_user", "test_password") == False
+    assert auth.getSession() == False
 
 # Tests para verificar el comportamiento con Mock
 def test_login_With_Mock():
@@ -81,5 +105,16 @@ def test_login_With_Mock_Fail_Connection():
     assert auth.getSession() == False
     
     mock_db.connection.assert_called_once()
-    mock_db.db.assert_not_called()
+    mock_db.db.assert_not_called() 
+
+#Test para credenciales muy largas
+def test_very_long_credentials():
+    mock_db = Mock()
+    mock_db.connection.return_value = "Success"
+    long_user = "a" * 1000
+    long_pass = "b" * 1000
+    mock_db.db.return_value = {long_user: long_pass}
+    auth = Authentication(mock_db)
+    assert auth.login(long_user, long_pass) == True
+    assert auth.getSession() == True #error porque no se maneja el error de credenciales muy largas y sirve para seguridad
 
