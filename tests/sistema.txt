@@ -1,3 +1,218 @@
+MAIN.PY:
+
+from modules import Authentication, Analytics, report, getData, spinner
+from getpass import getpass
+import threading
+
+class dataBase: # Fake
+    def __init__(self) -> None:
+        pass
+    def connection(self): # Stub
+        return "Success"
+    def db(self):# Stub
+        return {"user1":"pass1","user2":"pass2"}
+
+AuthSystem = Authentication(dataBase())
+
+# Crear un hilo paralelo para el spinner de carga
+stop_event = threading.Event()
+spinner_thread = threading.Thread(target=spinner, args=(stop_event,))
+
+print(f"===========================================================")
+print(f"============== Sistema de análisis de datos ===============")
+print(f"===========================================================")
+print("Por favor inicie sesión.")
+
+session = AuthSystem.getSession()
+tries = 0
+while tries < 3:
+    user = input("Ingrese usuario: ")
+    password = getpass("Contraseña: ")
+    if AuthSystem.login(user, password):
+        session = AuthSystem.getSession()
+        break
+
+    tries += 1
+
+if session:
+    print(f"===========================================================")
+    print(f"==================== Bienvenid@ {user} ====================")
+    print(f"===========================================================")
+    print("Obteniendo datos de ... https://data.urbansharing.com/bergenbysykkel.no/trips/v1/2024/09.json")
+
+    data_response = getData("https://data.urbansharing.com/bergenbysykkel.no/trips/v1/2024/09.json","data/input") 
+
+    AnalyticsModule = Analytics()
+    analized_data = AnalyticsModule.AnalizeData()
+
+    if data_response:
+        print("Generando reporte...")
+        spinner_thread.start()
+        report("data/output/report.pdf", analized_data, user)
+        stop_event.set()
+    else:
+        print("No hay datos para generar reporte.")
+
+spinner_thread.join()
+print("=================== Programa finalizado ===================")
+
+SPINNER.PY:
+
+import itertools
+import time
+import sys
+def spinner(stop_event):
+    spinner_cycle = itertools.cycle(['-', '/', '|', '\\'])
+    while not stop_event.is_set():  # El spinner se detendrá cuando el evento esté activado
+        sys.stdout.write(next(spinner_cycle))
+        sys.stdout.flush()
+        sys.stdout.write('\b')  # Borra el símbolo anterior
+        time.sleep(0.1)
+
+
+AUTHENTICATION.PY:
+class Authentication:
+    def __init__(self, userDataBase):
+        self.dataBaseObject = userDataBase
+        self.session = False
+    
+    def login (self, user, password):
+
+        if not(isinstance(user,str)) or not(isinstance(password,str)):
+            raise ValueError("El usuario y/o la contraseña deben ser str.")
+
+        if self.dataBaseObject.connection() != "Success":
+            print("Error al conectar la base de datos.")
+            return False
+        
+        if self.session == True:
+            print("Ya hay una sesión activa.")
+            return True
+        
+        db = self.dataBaseObject.db() 
+
+        if user in db and db[user] == password:
+            self.session = True
+            return True
+        else:
+            print("Usuario y/o contraseña inválidos.")
+            return False
+    
+    def logout (self):
+        self.session = False
+        print("Sesión cerrada con éxito.")
+    
+    def getSession(self):
+        return self.session
+
+        
+REQUEST.PY:
+import requests
+import pandas as pd
+
+def getData(url,path):
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        try:
+            df = pd.DataFrame(data)
+            df = df.iloc[0:10000] 
+            print("Guardando datos en data/input/datos.xlsx ...")
+            df.to_excel(f"{path}/data.xlsx",index=False)
+            print("Datos obtenidos y guardados.")
+        except:
+            print("Error al convertir y almacenar el archivo.")
+            return False
+        return True
+    else:
+        print("Error obteniendo datos del servidor.")
+        return False
+
+
+ANALYTICS.PY
+
+from ._01authentication import Authentication
+from ._02request import getData
+from ._04report import report
+import pandas as pd
+from geopy.distance import geodesic
+
+class Analytics:
+    def __init__(self):
+        pass
+
+    def AnalizeData(self):
+        print("Leyendo datos...")
+        data = pd.read_excel("data/input/data.xlsx")
+
+        print("Analizando datos...")
+
+        # Borrar duplicados
+        data = data[data["start_station_name"] != data["end_station_name"]]
+
+        # Rutas más populares
+        data["route"] = data["start_station_name"] + " to " + data["end_station_name"] 
+        most_popular_routes = data["route"].value_counts().reset_index().head(10)
+
+        # Distancias más grandes entre estaciones
+        def CalculateDistance(row):
+            start_coords = (row["start_station_latitude"], row["start_station_longitude"])
+            end_coords = (row["end_station_latitude"], row["end_station_longitude"])
+            return geodesic(start_coords, end_coords).kilometers
+
+        data["distance_km"] = data.apply(CalculateDistance, axis=1) 
+        distance_between_routes = data[["route","distance_km"]].sort_values(by="distance_km", ascending=False).drop_duplicates().reset_index().drop(columns="index").head(10) 
+
+        # Mayor duración promedio
+        average_route_durations = data.groupby('route').agg(
+            avg_duration=('duration', 'mean'), 
+            trip_count=('route', 'count')
+        ).reset_index()
+
+        longest_duration_routes = average_route_durations.sort_values(by='avg_duration', ascending=False).reset_index().drop(columns="index").head(10)
+
+        # New analysis for duration and distance statistics
+        data['duration']
+        duration_stats = {
+            'mean': data['duration'].mean(),
+            'variance': data['duration'].var(),
+            'std_dev': data['duration'].std(),
+            'max': data['duration'].max(),
+            'min': data['duration'].min(),
+            '25th_percentile': data['duration'].quantile(0.25),
+            '50th_percentile': data['duration'].quantile(0.50),
+            '75th_percentile': data['duration'].quantile(0.75)
+        }
+
+        distance_stats = {
+            'mean': data['distance_km'].mean(),
+            'variance': data['distance_km'].var(),
+            'std_dev': data['distance_km'].std(),
+            'max': data['distance_km'].max(),
+            'min': data['distance_km'].min(),
+            '25th_percentile': data['distance_km'].quantile(0.25),
+            '50th_percentile': data['distance_km'].quantile(0.50),
+            '75th_percentile': data['distance_km'].quantile(0.75)
+        }
+
+        # Combine stats into a single DataFrame for reporting
+        stats_df = pd.DataFrame({
+            'Statistic': ['Mean', 'Variance', 'Standard Deviation', 'Max', 'Min', '25th Percentile', '50th Percentile', '75th Percentile'],
+            'Duration': [duration_stats['mean'], duration_stats['variance'], duration_stats['std_dev'], duration_stats['max'], duration_stats['min'], duration_stats['25th_percentile'], duration_stats['50th_percentile'], duration_stats['75th_percentile']],
+            'Distance (km)': [distance_stats['mean'], distance_stats['variance'], distance_stats['std_dev'], distance_stats['max'], distance_stats['min'], distance_stats['25th_percentile'], distance_stats['50th_percentile'], distance_stats['75th_percentile']]
+        })
+
+        self.analizedData = {
+            "data": data,
+            "most_popular_routes": most_popular_routes,
+            "distance_between_routes": distance_between_routes,
+            "longest_duration_routes": longest_duration_routes,
+            "stats": stats_df  # Add the new stats DataFrame
+        }
+        return self.analizedData
+    
+        
+REPORT.PY:
 import os
 import pandas as pd
 import matplotlib.pyplot as plt

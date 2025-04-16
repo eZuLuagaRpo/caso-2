@@ -13,7 +13,6 @@ data = [{"id": i, "name": f"Item {i}", "value": i * 100} for i in range(15000)]
 def temp_dir(tmp_path):
     return tmp_path
 
-    
 # Test para verificar que getData maneja correctamente una respuesta exitosa
 def test_successful_response(temp_dir): 
     mock_response = MagicMock()
@@ -41,7 +40,6 @@ def test_error_response(temp_dir):
         assert response == False
         excel_file = temp_dir / "data.xlsx"
         assert not excel_file.exists()
-
 
 # Test para verificar que getData maneja correctamente datos JSON inválidos
 def test_invalid_json(temp_dir):
