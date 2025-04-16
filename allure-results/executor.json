@@ -1,0 +1,11 @@
+
+    {
+        "name": "Team Nicolas y Emanuel",
+        "type": "jenkins",
+        "url": "https://jenkins.example.com/job/tests/123",
+        "buildOrder": 123,
+        "buildName": "Build #123",
+        "buildUrl": "https://jenkins.example.com/job/tests/123",
+        "reportUrl": "https://jenkins.example.com/job/tests/123/allure"
+    }
+

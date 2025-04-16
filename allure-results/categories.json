@@ -1,0 +1,21 @@
+[
+    {
+      "name": "Authentication Failures",
+      "matchedStatuses": ["failed"],
+      "messageRegex": ".*login.*"
+    },
+    {
+      "name": "Data Retrieval Errors",
+      "matchedStatuses": ["failed"],
+      "messageRegex": ".*getData.*"
+    },
+    {
+      "name": "Analytics Processing Issues",
+      "matchedStatuses": ["failed"],
+      "messageRegex": ".*AnalizeData.*"
+    },
+    {
+      "name": "Test Defects",
+      "matchedStatuses": ["broken"]
+    }
+  ]

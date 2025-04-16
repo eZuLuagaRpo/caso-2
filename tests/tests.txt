@@ -1,0 +1,763 @@
+TEST SPINNER.PY:
+import time
+import pytest
+import threading
+import sys
+from io import StringIO
+from modules._00spinner import spinner
+
+
+#verificar que el hilo no se inicia si no se llama a start
+def test_spinner_join_without_start():
+    stop_event = threading.Event()
+    spinner_thread = threading.Thread(target=spinner, args=(stop_event,))
+    
+    # No iniciar el hilo, solo llamar a join
+    spinner_thread.join(timeout=0.1)
+    
+    # Verificar que no hay errores (el hilo simplemente no está activo)
+    assert not spinner_thread.is_alive()
+
+
+def test_spinner_stops_on_error():
+    stop_event = threading.Event()
+    spinner_thread = threading.Thread(target=spinner, args=(stop_event,))
+    spinner_thread.start()
+    
+    try:
+        time.sleep(0.5) 
+        raise RuntimeError("Simulated error")
+    except RuntimeError:
+        time.sleep(0.5) 
+        spinner_thread.join(timeout=0.1) 
+        assert not spinner_thread.is_alive(), "Spinner did not stop after error"
+    
+    stop_event.set()
+    spinner_thread.join(timeout=1.0)
+
+
+TEST AUTHENTICATION.PY:
+import pytest
+from unittest.mock import Mock
+from modules._01authentication import Authentication
+
+class DummyDatabase:
+    """Simular la base de datos"""
+    def connection(self):
+        return "Success"
+    
+    def db(self):
+        return {}
+
+class StubDatabase: 
+    """Retorna valores predefinidos"""
+    def connection(self):
+        return "Success"
+    
+    def db(self):
+        return {"test_user": "test_password"}
+
+# Fixture para login con DummyDatabase
+@pytest.fixture
+def auth_dummy():
+    db = DummyDatabase()
+    auth = Authentication(db)
+    yield auth
+    # tearDown
+    auth.logout()
+
+@pytest.fixture
+def auth_stub():
+    db = StubDatabase()
+    auth = Authentication(db)
+    yield auth
+    # tearDown
+    auth.logout()
+
+# Tests para login con tipos inválidos
+def test_login_invalid_types(auth_dummy):
+    with pytest.raises(ValueError):
+        auth_dummy.login(123, "password")
+    with pytest.raises(ValueError):
+        auth_dummy.login("user", 123)
+
+#Test para datos vacios
+def test_login_empty_strings(auth_dummy):
+    with pytest.raises(ValueError):
+        auth_dummy.login("", "")
+
+#Test para datos nulos
+def test_login_none_values(auth_dummy):
+    with pytest.raises(ValueError):
+        auth_dummy.login(None, None)
+
+#Test para base de datos vacia
+def test_empty_database(auth_dummy):
+    assert auth_dummy.login("test_user", "test_password") == False
+    assert auth_dummy.getSession() == False
+
+# Tests para login exitoso
+def test_valid_login(auth_stub):
+    assert auth_stub.login("test_user", "test_password") == True
+    assert auth_stub.getSession() == True
+
+# Tests para login fallido
+def test_invalid_login(auth_stub):
+    assert auth_stub.login("wrong_user", "wrong_password") == False
+    assert auth_stub.getSession() == False
+
+# Tests Logout
+def test_logout(auth_stub):
+    auth_stub.login("test_user", "test_password")
+    assert auth_stub.getSession() == True
+    auth_stub.logout()
+    assert auth_stub.getSession() == False
+
+#Test para base de datos nula
+def test_none_database():
+    mock_db = Mock()
+    mock_db.connection.return_value = "Success"
+    mock_db.db.return_value = None
+    auth = Authentication(mock_db)
+    assert auth.login("test_user", "test_password") == False
+    assert auth.getSession() == False
+
+# Tests para verificar el comportamiento con Mock
+def test_login_With_Mock():
+    mock_db = Mock()
+    mock_db.connection.return_value = "Success"
+    mock_db.db.return_value = {"test_user": "test_password"}
+    
+    auth = Authentication(mock_db)
+    assert auth.login("test_user", "test_password") == True
+    assert auth.getSession() == True
+    mock_db.connection.assert_called_once()
+    mock_db.db.assert_called_once()
+    
+#Test para credenciales muy largas
+def test_very_long_credentials():
+    mock_db = Mock()
+    mock_db.connection.return_value = "Success"
+    long_user = "a" * 1000
+    long_pass = "b" * 1000
+    mock_db.db.return_value = {long_user: long_pass}
+    auth = Authentication(mock_db)
+    assert auth.login(long_user, long_pass) == True
+    assert auth.getSession() == True #error porque no se maneja el error de credenciales muy largas y sirve para seguridad
+
+
+TEST REQUEST.PY:
+import pytest
+import pandas as pd
+import json
+import os
+from unittest.mock import patch, MagicMock
+from modules._02request import getData
+
+# Datos de prueba
+data = [{"id": i, "name": f"Item {i}", "value": i * 100} for i in range(15000)]
+
+# Fixture para crear un directorio temporal
+@pytest.fixture
+def temp_dir(tmp_path):
+    return tmp_path
+
+# Test para verificar que getData maneja correctamente una respuesta exitosa
+def test_successful_response(temp_dir): 
+    mock_response = MagicMock()
+    mock_response.status_code = 200 
+    mock_response.json.return_value = data 
+    
+    with patch("modules._02request.requests.get", return_value=mock_response):
+        response = getData("https://ejemplo.com/api/data", str(temp_dir))
+        assert response == True
+        
+        excel_file = temp_dir / "data.xlsx"
+        assert excel_file.exists()
+        
+        df = pd.read_excel(excel_file)
+        assert len(df) == 10000
+        assert list(df.columns) == ["id", "name", "value"]
+
+# Test para verificar que getData maneja correctamente una respuesta con error
+def test_error_response(temp_dir):
+    mock_response = MagicMock()
+    mock_response.status_code = 404
+    with patch("modules._02request.requests.get", return_value=mock_response):
+        response = getData("https://example.com/api/data", str(temp_dir))
+
+        assert response == False
+        excel_file = temp_dir / "data.xlsx"
+        assert not excel_file.exists()
+
+# Test para verificar que getData maneja correctamente datos JSON inválidos
+def test_invalid_json(temp_dir):
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = "estructura de datos inválida"    
+    
+    with patch("modules._02request.requests.get", return_value=mock_response):
+        response = getData("https://example.com/api/data", str(temp_dir))
+        assert response == False
+        excel_file = temp_dir / "data.xlsx"
+        assert not excel_file.exists()
+
+#Test para verificar si el codigo maneja errores de conexion 
+def test_connection_error(temp_dir):
+    with patch("modules._02request.requests.get", side_effect=Exception("Connection error")):
+        response = getData("https://example.com/api/data", str(temp_dir))
+        assert response == False
+        excel_file = temp_dir / "data.xlsx"
+        assert not excel_file.exists()
+
+# Test para verificar que getData maneja correctamente errores de escritura de archivo
+def test_file_write_error(temp_dir):
+    mock_response = MagicMock()
+    # Crear un mock para requests.get
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = data
+    
+    # Crear un directorio de solo lectura
+    read_only_dir = temp_dir / "readonly"
+    read_only_dir.mkdir()
+    os.chmod(read_only_dir, 0o444)  # Establecer permisos de solo lectura
+    
+    with patch("modules._02request.requests.get", return_value=mock_response):
+        # Llamar a getData con un directorio de solo lectura
+        result = getData("https://example.com/api/data", str(read_only_dir))
+        
+        # Verificar que la función retorna False
+        assert result == False
+        
+        # Verificar que no se creó el archivo Excel
+        excel_file = read_only_dir / "data.xlsx"
+        assert not excel_file.exists()
+    
+    # Restaurar permisos para evitar problemas con otros tests
+    os.chmod(read_only_dir, 0o755)
+
+
+TEST ANALYTICS.PY:
+import pytest
+import pandas as pd
+from unittest.mock import patch
+from modules._03analytics import Analytics
+
+# Clase auxiliar para simular geopy.distance.geodesic
+class MockDistance:
+    def __init__(self, km):
+        self.kilometers = km
+
+@pytest.fixture
+def sample_data():
+    return pd.DataFrame({
+        "start_station_name": ["Station A", "Station B", "Station A", "Station C", "Station D", "Station E", "Station F", "Station G", "Station H", "Station I", "Station J"],
+        "end_station_name": ["Station B", "Station C", "Station C", "Station D", "Station E", "Station F", "Station G", "Station H", "Station I", "Station J", "Station A"],
+        "start_station_latitude": [60.39, 60.40, 60.39, 60.42, 60.43, 60.44, 60.45, 60.46, 60.47, 60.48, 60.49],
+        "start_station_longitude": [5.32, 5.33, 5.32, 5.34, 5.35, 5.36, 5.37, 5.38, 5.39, 5.40, 5.41],
+        "end_station_latitude": [60.40, 60.41, 60.41, 60.42, 60.43, 60.44, 60.45, 60.46, 60.47, 60.48, 60.49],
+        "end_station_longitude": [5.33, 5.34, 5.34, 5.35, 5.36, 5.37, 5.38, 5.39, 5.40, 5.41, 5.42],
+        "duration": [300, 600, 450, 500, 700, 800, 900, 1000, 1100, 1200, 1300]
+    })
+
+# Test para verificar que el analizador de datos funciona correctamente
+def test_analyze_data_normal_case(sample_data):
+    with patch("pandas.read_excel", return_value=sample_data): 
+        with patch("modules._03analytics.geodesic", return_value=MockDistance(1.5)):
+            analytics = Analytics()
+            result = analytics.AnalizeData()
+
+            assert isinstance(result, dict)
+            assert set(result.keys()) == {"data", "most_popular_routes", "distance_between_routes", "longest_duration_routes", "stats"}
+            assert len(result["data"]) == len(sample_data)  # No hay duplicados en este caso
+            assert len(result["most_popular_routes"]) <= 10
+            assert "Station A to Station B" in result["most_popular_routes"]["route"].values
+
+            # Verificar distancias
+            assert len(result["distance_between_routes"]) <= 10
+            assert result["distance_between_routes"]["distance_km"].iloc[0] == 1.5
+
+            # Verificar duraciones
+            assert len(result["longest_duration_routes"]) <= 10
+            assert result["longest_duration_routes"]["avg_duration"].iloc[0] > 0
+
+            # Verificar estadísticas
+            assert len(result["stats"]) == 8
+            assert result["stats"]["Statistic"].tolist() == [
+                "Mean", "Variance", "Standard Deviation", "Max", "Min",
+                "25th Percentile", "50th Percentile", "75th Percentile"
+            ]
+
+
+# Test para verificar que el analizador de datos funciona correctamente con un DataFrame vacío
+"""
+Esta prueba va a lanzar error porque el modulo no maneja 
+correctamente los datos vacios ya que asume que data siempre tiene
+filas para procesar.
+"""
+def test_analyze_data_empty():
+    empty_data = pd.DataFrame(columns=[
+        "start_station_name", "end_station_name",
+        "start_station_latitude", "start_station_longitude",
+        "end_station_latitude", "end_station_longitude",
+        "duration"
+    ])
+    
+    with patch("pandas.read_excel", return_value=empty_data):
+        with patch("geopy.distance.geodesic", return_value=MockDistance(0)):
+            analytics = Analytics()
+            result = analytics.AnalizeData()
+
+            # Verificar que no hay datos procesados
+            assert len(result["data"]) == 0
+            assert len(result["most_popular_routes"]) == 0
+            assert len(result["distance_between_routes"]) == 0
+            assert len(result["longest_duration_routes"]) == 0
+            # Verificar que stats tiene valores NaN o ceros donde corresponde
+            assert result["stats"]["Duration"].iloc[0].isna()  # Media es NaN
+
+"""
+La prueba pasa, pero aqui deben haber mejoras en el modulo para
+controlar cuando el archivo no existe. con el fin de que el codigo
+no se detenga abruptamente.
+"""
+# Test para verificar que el analizador de datos maneja correctamente un archivo no encontrado
+def test_analyze_data_file_not_found():
+    with patch("pandas.read_excel", side_effect=FileNotFoundError):
+        analytics = Analytics()
+        with pytest.raises(FileNotFoundError):
+            analytics.AnalizeData()
+
+# Test para verificar que el analizador de datos maneja correctamente un DataFrame sin columnas requeridas
+def test_analyze_data_missing_columns():
+    # DataFrame sin columnas requeridas
+    invalid_data = pd.DataFrame({
+        "other_column": [1, 2, 3]
+    })
+    
+    with patch("pandas.read_excel", return_value=invalid_data):
+        analytics = Analytics()
+        with pytest.raises(KeyError):
+            analytics.AnalizeData()
+
+"""
+En esta prueba se busca verificar si el modulo elimina
+duplicados de estaciones iguales.
+"""
+# Test para verificar que el analizador de datos maneja correctamente una ruta con estaciones iguales
+def test_analyze_data_same_stations(sample_data):
+    sample_data.loc[3] = [
+        "Station A", "Station A", 60.39, 5.32, 60.39, 5.32, 200
+    ]
+    
+    with patch("pandas.read_excel", return_value=sample_data):
+        analytics = Analytics()
+        result = analytics.AnalizeData()
+  
+        # Verificar que la ruta con estaciones iguales fue eliminada
+        assert len(result["data"]) == 10  # Una fila menos
+        assert not (result["data"]["start_station_name"] == result["data"]["end_station_name"]).any()
+
+"""
+El codigo falla por que el modulo no maneja correctamente las coordenadas
+vacias y permite que se procesen. remplazando Nan por 0.
+"""
+# Test para verificar que el analizador de datos maneja correctamente coordenadas inválidas
+def test_analyze_data_invalid_coordinates():
+    invalid_data = pd.DataFrame({
+        "start_station_name": ["Station A"],
+        "end_station_name": ["Station B"],
+        "start_station_latitude": [None],
+        "start_station_longitude": [5.32],
+        "end_station_latitude": [60.40],
+        "end_station_longitude": [5.33],
+        "duration": [300]
+    })
+    
+    with patch("pandas.read_excel", return_value=invalid_data):
+        analytics = Analytics()
+        with pytest.raises(ValueError):  # geodesic fallará con None
+            analytics.AnalizeData()
+
+TEST REPORT.PY:
+import os
+import io
+import pytest
+import pandas as pd
+import seaborn as sns
+import matplotlib
+matplotlib.use("Agg")  # ¡Antes de importar pyplot!
+import matplotlib.pyplot as plt
+from unittest.mock import MagicMock
+from io import BytesIO
+from reportlab.platypus import Table
+from reportlab.lib import colors
+from modules._04report import (
+    PDFWithHeaderFooter,
+    create_bar_chart,
+    dataframe_to_table,
+    create_map_plot,
+    create_distribution_plots,
+    create_scatter_plot,
+    create_box_plots,
+    report
+)
+from modules._03analytics import Analytics
+import contextily as ctx
+
+#fixture para los datos de prueba
+@pytest.fixture
+def sample_data():
+    """Datos de prueba simulados con estructura completa."""
+    return pd.DataFrame({
+        'start_station_name': ['Station A', 'Station B', 'Station A', 'Station C'],
+        'end_station_name': ['Station B', 'Station C', 'Station C', 'Station A'],
+        'start_station_latitude': [60.39, 60.38, 60.39, 60.37],
+        'start_station_longitude': [5.32, 5.33, 5.32, 5.34],
+        'end_station_latitude': [60.38, 60.37, 60.37, 60.39],
+        'end_station_longitude': [5.33, 5.34, 5.32, 5.32],
+        'duration': [300, 450, 600, 200],
+        'distance_km': [1.2, 2.5, 3.0, 1.8],
+        'route': ['Station A to Station B', 'Station B to Station C', 'Station A to Station C', 'Station C to Station A']
+    })
+
+#fixture para analizar los datos simulados y tener los resultados
+@pytest.fixture
+def analized_data(sample_data, monkeypatch):
+    """Datos analizados simulados con monkeypatch para lectura de Excel."""
+    monkeypatch.setattr(pd, 'read_excel', MagicMock(return_value=sample_data))
+    analytics = Analytics()
+    return analytics.AnalizeData()
+
+#fixture para los datos de prueba invalidos
+@pytest.fixture
+def invalid_data():
+    """Datos inválidos para pruebas de edge cases."""
+    return {
+        "most_popular_routes": pd.DataFrame(),
+        "distance_between_routes": pd.DataFrame(),
+        "longest_duration_routes": pd.DataFrame(),
+        "data": pd.DataFrame(),
+        "stats": pd.DataFrame()
+    }
+
+#mock para todas las pruebas 
+@pytest.fixture(autouse=True)
+def global_mocks(monkeypatch):
+    # Evita apertura de PDF
+    monkeypatch.setattr(os, "startfile", lambda _: None)
+    
+
+    """
+    Mock para eliminar la dependencia de un archivo de logo (assets/logo.png)
+    Evita errores si el logo no existe durante las pruebas
+    """
+    monkeypatch.setattr(
+        PDFWithHeaderFooter, 
+        "_header_footer", 
+        lambda self, canvas, doc: None
+    )
+    
+    """
+    Mock para evitar la llamada a add_basemap de contextily
+    Evita errores si no hay conexión a internet
+    """
+    monkeypatch.setattr(ctx, "add_basemap", lambda ax, crs: None)
+
+#Test para crear la tabla
+def test_dataframe_to_table(sample_data):
+    table = dataframe_to_table(sample_data)
+    assert isinstance(table, Table)
+    assert len(table._cellvalues) == len(sample_data) + 1  # Filas + encabezado
+
+#Test para crear el grafico de barras
+def test_create_bar_chart(sample_data):
+    buffer = create_bar_chart(sample_data, 'distance_km', 'Test Chart')
+    assert isinstance(buffer, BytesIO)
+    assert len(buffer.getvalue()) > 0
+    buffer.close()
+
+#Test para crear el grafico de mapa
+def test_create_map_plot(sample_data):
+    buffer = create_map_plot(sample_data)
+    assert isinstance(buffer, BytesIO)
+    buffer.close()      
+
+#Test para crear el grafico de distribucion
+def test_create_distribution_plots(sample_data):
+    buffer = create_distribution_plots(sample_data)
+    assert buffer.getvalue()[:8] == b'\x89PNG\r\n\x1a\n'
+    buffer.close()
+
+#Test para crear el grafico de dispersion           
+def test_create_scatter_plot(sample_data):
+    buffer = create_scatter_plot(sample_data)
+    assert buffer.tell() == 0  # Verifica posición inicial después de seek(0)
+    buffer.close()
+
+#Test para crear el grafico de boxplots
+def test_create_box_plots(sample_data):
+    buffer = create_box_plots(sample_data)
+    assert not buffer.closed  # Verifica que el buffer esté abierto
+    buffer.close()
+
+#Test para generar el reporte
+def test_report_generation(tmp_path, analized_data):
+    pdf_path = tmp_path/"report.pdf"
+    report(str(pdf_path), analized_data, "test_user")
+    
+    # Verificaciones básicas del archivo
+    assert pdf_path.exists()
+    assert pdf_path.stat().st_size > 1024  # PDF no vacío
+    
+    # Verificación de contenido mínimo
+    with open(pdf_path, 'rb') as f:
+        content = f.read()
+        assert b'%PDF' in content  # Cabecera de PDF válida
+
+
+
+TEST INTEGRACION.PY:
+import os
+import pandas as pd
+import pytest
+import threading
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+from PIL import Image
+
+# Importación de módulos del sistema
+from modules._01authentication import Authentication
+from modules._03analytics import Analytics
+from modules._04report import report
+from modules._02request import getData
+import main
+
+#Clases y utilidades auxiliare
+class StubDatabase:
+    """Retorna valores predefinidos para simular base de datos"""
+    def connection(self):
+        return "Success"
+    
+    def db(self):
+        return {"test_user": "test_password"}
+
+class FakeThread:
+    """Implementación falsa de Thread para evitar ejecución de hilos reales"""
+    def __init__(self, *args, **kwargs):
+        pass
+    def start(self):
+        pass
+    def join(self):
+        pass
+
+#Fixtures para datos de prueba
+@pytest.fixture
+def sample_data():
+    """Proporciona un conjunto de datos de muestra para las pruebas"""
+    return [{
+        "start_station_name": "Station A",
+        "end_station_name": "Station B",
+        "start_station_latitude": 60.39,
+        "start_station_longitude": 5.32,
+        "end_station_latitude": 60.38,
+        "end_station_longitude": 5.33,
+        "duration": 300,
+        "distance_km": 1.2,
+        "route": "Station A to Station B"
+    }]
+
+#Fixtures para configuración de entorno
+@pytest.fixture
+def auth_stub():
+    """Proporciona un objeto Authentication inicializado con un StubDatabase"""
+    db = StubDatabase()
+    auth = Authentication(db)
+    yield auth
+    # tearDown
+    auth.logout()
+
+@pytest.fixture
+def auth_stub_main(monkeypatch):
+    """Reemplaza la clase dataBase en main con StubDatabase"""
+    monkeypatch.setattr(main, "dataBase", StubDatabase)
+    yield
+
+@pytest.fixture
+def temp_dirs(tmp_path):
+    """Crea una estructura de directorios temporal para las pruebas"""
+    input_dir = tmp_path / "data" / "input"
+    output_dir = tmp_path / "data" / "output"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    return {
+        "root": tmp_path,
+        "input": input_dir,
+        "output": output_dir,
+        "excel_path": input_dir / "data.xlsx"
+    }
+
+@pytest.fixture
+def temp_working_dir(temp_dirs, monkeypatch):
+    """Cambia el directorio de trabajo actual al directorio temporal"""
+    monkeypatch.chdir(temp_dirs["root"])
+    return temp_dirs["root"]
+
+@pytest.fixture
+def create_fake_logo(temp_working_dir):
+    """
+    Crea una imagen JPG real en assets/usb.jpg para evitar errores de PIL/ReportLab.
+    """
+    assets_dir = temp_working_dir / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+
+    fake_logo_path = assets_dir / "usb.jpg"
+
+    # Crear una imagen real (100x100 px, fondo blanco)
+    img = Image.new("RGB", (100, 100), color="white")
+    img.save(fake_logo_path, "JPEG")
+
+    return str(fake_logo_path)
+
+#Fixtures para mocks y parches
+@pytest.fixture
+def simulate_inputs(monkeypatch):
+    """Simula entradas del usuario para login"""
+    monkeypatch.setattr("builtins.input", lambda _: "test_user")
+    monkeypatch.setattr(main, "getpass", lambda prompt="": "test_password")
+
+@pytest.fixture
+def mock_http_response(sample_data):
+    """Crea una respuesta HTTP simulada con datos de prueba"""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = sample_data
+    return mock_response
+
+@pytest.fixture
+def patch_requests_get(monkeypatch, sample_data):
+    """Parchea el método requests.get para simular una respuesta HTTP exitosa"""
+    def fake_get(url):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = sample_data
+        return mock_response
+
+    monkeypatch.setattr("modules._02request.requests.get", fake_get)
+    yield
+
+@pytest.fixture(autouse=True)
+def patch_external(monkeypatch):
+    """Parchea funciones externas para evitar efectos secundarios durante las pruebas"""
+    # Evitar que se abra el PDF al final
+    monkeypatch.setattr("main.os.startfile", lambda path: None)
+    # Parchear spinner para que no haga nada
+    monkeypatch.setattr(main, "spinner", lambda stop_event: None)
+    # Parchear threading.Thread para evitar errores con el hilo del spinner
+    monkeypatch.setattr(threading, "Thread", lambda *args, **kwargs: FakeThread())
+
+
+"""
+Prueba de integración que simula el flujo completo:
+1. Inicio de sesión con credenciales de prueba usando StubDatabase
+2. Obtención de datos simulados a través de mock_http_response
+3. Análisis de los datos generados usando Analytics
+4. Generación del reporte PDF y verificación de su existencia
+    
+Esta prueba verifica la integración entre todos los módulos pero sin invocar
+directamente a main.py, lo que permite un mayor control sobre cada paso.
+"""
+def test_full_system_integration(auth_stub, temp_dirs, mock_http_response):
+
+    # 1. Autenticación
+    assert auth_stub.login("test_user", "test_password") is True, "El login debe ser exitoso con credenciales válidas"
+    
+    # 2. Simular obtención de datos
+    with patch("modules._02request.requests.get", return_value=mock_http_response):
+        url = "http://fake.url"
+        result = getData(url, str(temp_dirs["input"]))
+        assert result is True, "getData debe devolver True con respuesta exitosa"
+        assert temp_dirs["excel_path"].exists(), "El archivo Excel debe haberse creado"
+
+    # 3. Ejecutar Analytics
+    analytics = Analytics()
+    analized_data = analytics.AnalizeData()
+    
+    # Validar estructura del resultado
+    expected_keys = ["data", "most_popular_routes", "distance_between_routes", "longest_duration_routes", "stats"]
+    for key in expected_keys:
+        assert key in analized_data, f"La clave '{key}' debe estar presente en analized_data"
+
+    # 4. Generar reporte PDF
+    pdf_path = temp_dirs["output"] / "report.pdf"
+    report(str(pdf_path), analized_data, "test_user")
+    
+    # Verificar PDF
+    assert pdf_path.exists(), "El reporte PDF debe haberse creado"
+    assert os.path.getsize(str(pdf_path)) > 0, "El reporte PDF no debe estar vacío"
+
+
+"""
+Prueba la integración del proceso de autenticación desde main.py:
+1. Verifica que el sistema use correctamente la autenticación con StubDatabase
+2. Simula las entradas de usuario para el login
+3. Detiene la ejecución después del login para evitar ejecutar todo el flujo
+4. Comprueba que se muestre el mensaje de bienvenida con el nombre de usuario
+    
+Esta prueba se enfoca específicamente en el proceso de autenticación
+iniciado desde el punto de entrada principal del sistema.
+"""
+def test_main_auth_integration(auth_stub_main, simulate_inputs, monkeypatch, capsys):
+
+    # Detener ejecución después de autenticación para evitar el flujo completo
+    monkeypatch.setattr(main, "getData", lambda url, path: False)
+    
+    # Ejecutar main
+    main.main()
+    
+    # Verificar salida
+    captured = capsys.readouterr().out
+    assert "Bienvenid@ test_user" in captured, "El login debe mostrar el mensaje de bienvenida correctamente"
+
+
+"""
+Prueba de integración completa que inicia desde main.py:
+1. Simula la autenticación del usuario desde el punto de entrada principal
+2. Parchea la obtención de datos HTTP para devolver datos de prueba
+3. Parchea la generación del PDF para usar un logo simulado
+4. Ejecuta todo el flujo de la aplicación
+5. Verifica los mensajes de salida y la generación correcta del reporte
+    
+Esta prueba representa el escenario más cercano al uso real del sistema,
+probando toda la cadena de procesamiento desde el inicio hasta el final.
+"""
+def test_full_system_integration_main_request_analytics(
+    auth_stub_main,
+    simulate_inputs,
+    patch_requests_get,
+    temp_working_dir,
+    create_fake_logo,
+    capsys
+):
+    
+    # Parchear la ruta del logo en el header/footer para que apunte al archivo temporal
+    with patch("modules._04report.PDFWithHeaderFooter._header_footer") as mocked_header:
+        def custom_header(canvas_obj, doc):
+            canvas_obj.drawImage(create_fake_logo, 50, 730, width=50, height=50)
+
+        mocked_header.side_effect = custom_header
+
+        # Ejecutar el flujo principal completo
+        main.main()
+
+    # Verificaciones de mensajes en consola
+    captured = capsys.readouterr().out
+    assert "Leyendo datos..." in captured, "Debe mostrarse el mensaje de lectura de datos"
+    assert "Analizando datos..." in captured, "Debe mostrarse el mensaje de análisis de datos"
+    
+    # Verificar generación del reporte PDF
+    report_path = temp_working_dir / "data" / "output" / "report.pdf"
+    assert report_path.exists(), "El reporte PDF debe existir"
+    assert report_path.stat().st_size > 0, "El reporte PDF no debe estar vacío"

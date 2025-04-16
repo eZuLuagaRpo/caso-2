@@ -1,0 +1,1 @@
+[{"buildOrder":123,"reportUrl":"https://jenkins.example.com/job/tests/123/allure","data":{"failed":4,"broken":4,"skipped":0,"passed":25,"unknown":0,"total":33}}]

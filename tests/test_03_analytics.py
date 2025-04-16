@@ -2,6 +2,8 @@ import pytest
 import pandas as pd
 from unittest.mock import patch
 from modules._03analytics import Analytics
+import allure
+from allure_commons.types import Severity
 
 # Clase auxiliar para simular geopy.distance.geodesic
 class MockDistance:
@@ -21,6 +23,11 @@ def sample_data():
     })
 
 # Test para verificar que el analizador de datos funciona correctamente
+@allure.feature("Data Analytics System")
+@allure.title("Test Data Analysis with Normal Case")
+@allure.description("Verifica que el método AnalizeData procesa correctamente un conjunto de datos válido, generando estadísticas, rutas populares, distancias y duraciones.")
+@allure.tag("analytics", "unit", "positive")
+@allure.severity(Severity.CRITICAL)
 def test_analyze_data_normal_case(sample_data):
     with patch("pandas.read_excel", return_value=sample_data): 
         with patch("modules._03analytics.geodesic", return_value=MockDistance(1.5)):
@@ -48,13 +55,12 @@ def test_analyze_data_normal_case(sample_data):
                 "25th Percentile", "50th Percentile", "75th Percentile"
             ]
 
-
 # Test para verificar que el analizador de datos funciona correctamente con un DataFrame vacío
-"""
-Esta prueba va a lanzar error porque el modulo no maneja 
-correctamente los datos vacios ya que asume que data siempre tiene
-filas para procesar.
-"""
+@allure.feature("Data Analytics System")
+@allure.title("Test Data Analysis with Empty DataFrame")
+@allure.description("Verifica que el método AnalizeData maneja un DataFrame vacío, aunque el módulo no lo procesa correctamente y puede fallar. Debería retornar resultados vacíos.")
+@allure.tag("analytics", "unit", "negative")
+@allure.severity(Severity.NORMAL)
 def test_analyze_data_empty():
     empty_data = pd.DataFrame(columns=[
         "start_station_name", "end_station_name",
@@ -76,12 +82,12 @@ def test_analyze_data_empty():
             # Verificar que stats tiene valores NaN o ceros donde corresponde
             assert result["stats"]["Duration"].iloc[0].isna()  # Media es NaN
 
-"""
-La prueba pasa, pero aqui deben haber mejoras en el modulo para
-controlar cuando el archivo no existe. con el fin de que el codigo
-no se detenga abruptamente.
-"""
 # Test para verificar que el analizador de datos maneja correctamente un archivo no encontrado
+@allure.feature("Data Analytics System")
+@allure.title("Test Data Analysis with File Not Found")
+@allure.description("Verifica que el método AnalizeData lanza FileNotFoundError cuando el archivo de datos no existe. El módulo debería mejorar el manejo de este error.")
+@allure.tag("analytics", "unit", "negative")
+@allure.severity(Severity.NORMAL)
 def test_analyze_data_file_not_found():
     with patch("pandas.read_excel", side_effect=FileNotFoundError):
         analytics = Analytics()
@@ -89,6 +95,11 @@ def test_analyze_data_file_not_found():
             analytics.AnalizeData()
 
 # Test para verificar que el analizador de datos maneja correctamente un DataFrame sin columnas requeridas
+@allure.feature("Data Analytics System")
+@allure.title("Test Data Analysis with Missing Columns")
+@allure.description("Verifica que el método AnalizeData lanza KeyError cuando el DataFrame no contiene las columnas requeridas para el análisis.")
+@allure.tag("analytics", "unit", "negative")
+@allure.severity(Severity.NORMAL)
 def test_analyze_data_missing_columns():
     # DataFrame sin columnas requeridas
     invalid_data = pd.DataFrame({
@@ -100,11 +111,12 @@ def test_analyze_data_missing_columns():
         with pytest.raises(KeyError):
             analytics.AnalizeData()
 
-"""
-En esta prueba se busca verificar si el modulo elimina
-duplicados de estaciones iguales.
-"""
 # Test para verificar que el analizador de datos maneja correctamente una ruta con estaciones iguales
+@allure.feature("Data Analytics System")
+@allure.title("Test Data Analysis with Same Stations")
+@allure.description("Verifica que el método AnalizeData elimina correctamente las rutas donde la estación de inicio y fin son iguales, asegurando datos válidos.")
+@allure.tag("analytics", "unit", "positive")
+@allure.severity(Severity.CRITICAL)
 def test_analyze_data_same_stations(sample_data):
     sample_data.loc[3] = [
         "Station A", "Station A", 60.39, 5.32, 60.39, 5.32, 200
@@ -118,11 +130,12 @@ def test_analyze_data_same_stations(sample_data):
         assert len(result["data"]) == 10  # Una fila menos
         assert not (result["data"]["start_station_name"] == result["data"]["end_station_name"]).any()
 
-"""
-El codigo falla por que el modulo no maneja correctamente las coordenadas
-vacias y permite que se procesen. remplazando Nan por 0.
-"""
 # Test para verificar que el analizador de datos maneja correctamente coordenadas inválidas
+@allure.feature("Data Analytics System")
+@allure.title("Test Data Analysis with Invalid Coordinates")
+@allure.description("Verifica que el método AnalizeData lanza ValueError para coordenadas inválidas (None). El módulo falla al reemplazar NaN por 0, lo que debería corregirse.")
+@allure.tag("analytics", "unit", "edge")
+@allure.severity(Severity.MINOR)
 def test_analyze_data_invalid_coordinates():
     invalid_data = pd.DataFrame({
         "start_station_name": ["Station A"],

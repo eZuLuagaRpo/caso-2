@@ -12,8 +12,10 @@ from modules._03analytics import Analytics
 from modules._04report import report
 from modules._02request import getData
 import main
+import allure
+from allure_commons.types import Severity
 
-#Clases y utilidades auxiliare
+# Clases y utilidades auxiliares
 class StubDatabase:
     """Retorna valores predefinidos para simular base de datos"""
     def connection(self):
@@ -31,7 +33,7 @@ class FakeThread:
     def join(self):
         pass
 
-#Fixtures para datos de prueba
+# Fixtures para datos de prueba
 @pytest.fixture
 def sample_data():
     """Proporciona un conjunto de datos de muestra para las pruebas"""
@@ -47,7 +49,7 @@ def sample_data():
         "route": "Station A to Station B"
     }]
 
-#Fixtures para configuración de entorno
+# Fixtures para configuración de entorno
 @pytest.fixture
 def auth_stub():
     """Proporciona un objeto Authentication inicializado con un StubDatabase"""
@@ -100,7 +102,7 @@ def create_fake_logo(temp_working_dir):
 
     return str(fake_logo_path)
 
-#Fixtures para mocks y parches
+# Fixtures para mocks y parches
 @pytest.fixture
 def simulate_inputs(monkeypatch):
     """Simula entradas del usuario para login"""
@@ -137,19 +139,19 @@ def patch_external(monkeypatch):
     # Parchear threading.Thread para evitar errores con el hilo del spinner
     monkeypatch.setattr(threading, "Thread", lambda *args, **kwargs: FakeThread())
 
-
-"""
-Prueba de integración que simula el flujo completo:
-1. Inicio de sesión con credenciales de prueba usando StubDatabase
-2. Obtención de datos simulados a través de mock_http_response
-3. Análisis de los datos generados usando Analytics
-4. Generación del reporte PDF y verificación de su existencia
-    
-    Esta prueba verifica la integración entre todos los módulos pero sin invocar
-    directamente a main.py, lo que permite un mayor control sobre cada paso.
-"""
+# Prueba de integración que simula el flujo completo
+@allure.feature("System Integration")
+@allure.title("Test Full System Integration")
+@allure.description(
+    "Verifica la integración completa del sistema, incluyendo: "
+    "1. Autenticación con credenciales válidas usando StubDatabase, "
+    "2. Obtención de datos simulados mediante una respuesta HTTP mock, "
+    "3. Análisis de datos con el módulo Analytics, "
+    "4. Generación de un reporte PDF y verificación de su existencia."
+)
+@allure.tag("integration", "positive")
+@allure.severity(Severity.CRITICAL)
 def test_full_system_integration(auth_stub, temp_dirs, mock_http_response):
-
     # 1. Autenticación
     assert auth_stub.login("test_user", "test_password") is True, "El login debe ser exitoso con credenciales válidas"
     
@@ -177,19 +179,18 @@ def test_full_system_integration(auth_stub, temp_dirs, mock_http_response):
     assert pdf_path.exists(), "El reporte PDF debe haberse creado"
     assert os.path.getsize(str(pdf_path)) > 0, "El reporte PDF no debe estar vacío"
 
-
-"""
-Prueba la integración del proceso de autenticación desde main.py:
-1. Verifica que el sistema use correctamente la autenticación con StubDatabase
-2. Simula las entradas de usuario para el login
-3. Detiene la ejecución después del login para evitar ejecutar todo el flujo
-4. Comprueba que se muestre el mensaje de bienvenida con el nombre de usuario
-    
-Esta prueba se enfoca específicamente en el proceso de autenticación
-iniciado desde el punto de entrada principal del sistema.
-"""
+# Prueba la integración del proceso de autenticación desde main.py
+@allure.feature("System Integration")
+@allure.title("Test Main Authentication Integration")
+@allure.description(
+    "Verifica la integración del proceso de autenticación desde main.py, incluyendo: "
+    "1. Simulación de entradas de usuario para login con StubDatabase, "
+    "2. Ejecución de main.py hasta la autenticación, "
+    "3. Verificación del mensaje de bienvenida con el nombre de usuario."
+)
+@allure.tag("integration", "positive")
+@allure.severity(Severity.NORMAL)
 def test_main_auth_integration(auth_stub_main, simulate_inputs, monkeypatch, capsys):
-
     # Detener ejecución después de autenticación para evitar el flujo completo
     monkeypatch.setattr(main, "getData", lambda url, path: False)
     
@@ -200,18 +201,19 @@ def test_main_auth_integration(auth_stub_main, simulate_inputs, monkeypatch, cap
     captured = capsys.readouterr().out
     assert "Bienvenid@ test_user" in captured, "El login debe mostrar el mensaje de bienvenida correctamente"
 
-
-"""
-Prueba de integración completa que inicia desde main.py:
-1. Simula la autenticación del usuario desde el punto de entrada principal
-2. Parchea la obtención de datos HTTP para devolver datos de prueba
-3. Parchea la generación del PDF para usar un logo simulado
-4. Ejecuta todo el flujo de la aplicación
-5. Verifica los mensajes de salida y la generación correcta del reporte
-    
-Esta prueba representa el escenario más cercano al uso real del sistema,
-probando toda la cadena de procesamiento desde el inicio hasta el final.
-"""
+# Prueba de integración completa que inicia desde main.py
+@allure.feature("System Integration")
+@allure.title("Test Full System Integration from Main")
+@allure.description(
+    "Verifica la integración completa del sistema desde main.py, incluyendo: "
+    "1. Autenticación simulada con entradas de usuario, "
+    "2. Obtención de datos mediante una respuesta HTTP mock, "
+    "3. Análisis de datos con Analytics, "
+    "4. Generación de un reporte PDF con un logo simulado, "
+    "5. Verificación de mensajes en consola y existencia del reporte."
+)
+@allure.tag("integration", "positive")
+@allure.severity(Severity.CRITICAL)
 def test_full_system_integration_main_request_analytics(
     auth_stub_main,
     simulate_inputs,
@@ -220,7 +222,6 @@ def test_full_system_integration_main_request_analytics(
     create_fake_logo,
     capsys
 ):
-    
     # Parchear la ruta del logo en el header/footer para que apunte al archivo temporal
     with patch("modules._04report.PDFWithHeaderFooter._header_footer") as mocked_header:
         def custom_header(canvas_obj, doc):
