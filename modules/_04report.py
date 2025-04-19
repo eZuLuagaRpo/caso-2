@@ -99,39 +99,42 @@ def create_map_plot(data):
     return buffer
 
 # Función para crear el gráfico de distribuciones (histogramas para Duration y Distance)
-def create_distribution_plots(data):
-    plt.figure(figsize=(12, 6))
-    
-    # Histograma de Duration
-    plt.subplot(1, 2, 1)
+def create_distribution_plot1(data):
+    plt.figure(figsize=(7, 4))  # tamaño más proporcional
     plt.hist(data['duration'], bins=30, color='blue', alpha=0.7)
     plt.title('Distribution of Duration')
     plt.xlabel('Duration')
     plt.ylabel('Frequency')
-    
-    # Histograma de Distance
-    plt.subplot(1, 2, 2)
+
+    buffer = BytesIO()
+    plt.savefig(buffer, format='png', bbox_inches='tight') 
+    buffer.seek(0)
+    plt.close()
+    return buffer
+
+def create_distribution_plot2(data):
+    plt.figure(figsize=(7, 4))
     plt.hist(data['distance_km'], bins=30, color='green', alpha=0.7)
     plt.title('Distribution of Distance')
     plt.xlabel('Distance (km)')
     plt.ylabel('Frequency')
-    
+
     buffer = BytesIO()
-    plt.savefig(buffer, format='png')
+    plt.savefig(buffer, format='png', bbox_inches='tight')
     buffer.seek(0)
     plt.close()
     return buffer
 
 # Función para crear el gráfico scatter (Duration vs Distance)
 def create_scatter_plot(data):
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(7, 5))
     plt.scatter(data['duration'], data['distance_km'], alpha=0.5)
     plt.title('Duration vs Distance')
     plt.xlabel('Duration')
     plt.ylabel('Distance (km)')
     
     buffer = BytesIO()
-    plt.savefig(buffer, format='png')
+    plt.savefig(buffer, format='png', bbox_inches='tight')
     buffer.seek(0)
     plt.close()
     return buffer
@@ -245,29 +248,35 @@ def report(filePath, analized_data, username):
         ('BACKGROUND', (0, 1), (-1, -1), colors.beige)
     ]))
     elements.append(table_stats)
+    elements.append(Spacer(1, 0.2*inch))  
 
-    # Gráfico de distribuciones (histogramas)
-    buffer_distribution = create_distribution_plots(data)
-    elements.append(Image(buffer_distribution, width=800, height=400))
-    
+
+    buffer_distribution = create_distribution_plot1(data)
+    elements.append(Image(buffer_distribution, width=5.5*inch, height=3*inch))  
+    elements.append(Spacer(1, 0.2*inch))  
+
+    buffer_distribution = create_distribution_plot2(data)
+    elements.append(Image(buffer_distribution, width=5.5*inch, height=3*inch))
+
     # Gráfico scatter (Duration vs Distance)
     buffer_scatter = create_scatter_plot(data)
-    elements.append(Image(buffer_scatter, width=600, height=400))
+    elements.append(Image(buffer_scatter, width=5.5*inch, height=3*inch))
+    elements.append(Spacer(1, 0.2*inch)) 
     
     # Gráfico de box plots (Duration y Distance)
     buffer_box = create_box_plots(data)
-    elements.append(Image(buffer_box, width=800, height=400))
+    elements.append(Image(buffer_box, width=5.5*inch, height=3*inch))
     
     # Correlation Heatmap
     correlation_matrix = data[['duration', 'distance_km']].corr()
     plt.figure(figsize=(6, 5))
     sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt='.2f', square=True)
-    plt.title('Correlation Heatmap')
+    plt.title('Mapa de Correlacion')
     buffer_heatmap = BytesIO()
     plt.savefig(buffer_heatmap, format='png')
     buffer_heatmap.seek(0)
     plt.close()
-    elements.append(Image(buffer_heatmap, width=600, height=400))
+    elements.append(Image(buffer_heatmap, width=6*inch, height=3.5*inch))
 
     # Construir el PDF
     doc.build(elements)
